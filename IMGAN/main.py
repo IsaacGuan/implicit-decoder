@@ -1,9 +1,11 @@
 import os
 import scipy.misc
 import numpy as np
+import pandas as pd
 
 from model import IMAE
 from modelz import ZGAN
+from model_zgenerator import ZGenerator
 
 import tensorflow as tf
 import h5py
@@ -12,14 +14,17 @@ flags = tf.app.flags
 flags.DEFINE_integer("epoch", 10000, "Epoch to train [25]")
 flags.DEFINE_float("learning_rate", 0.00005, "Learning rate of for adam [0.0002]")
 flags.DEFINE_float("beta1", 0.5, "Momentum term of adam [0.5]")
-flags.DEFINE_string("dataset", "03001627_vox", "The name of dataset")
+flags.DEFINE_string("dataset", "chairs_vox", "The file name of dataset")
+flags.DEFINE_string("z_vectors", "chairs_z", "The file name of z vectors")
+flags.DEFINE_string("mu_vectors", "chairs_mu", "The file name of mu vectors")
+flags.DEFINE_string("sigma_vectors", "chairs_sigma", "The file name of sigma vectors")
 flags.DEFINE_integer("real_size", 64, "output point-value voxel grid size in training [64]")
 flags.DEFINE_integer("batch_size_input", 32768, "training batch size (virtual, batch_size is the real batch_size) [32768]")
 flags.DEFINE_string("checkpoint_dir", "checkpoint", "Directory name to save the checkpoints [checkpoint]")
 flags.DEFINE_string("data_dir", "./data", "Root directory of dataset [data]")
 flags.DEFINE_string("sample_dir", "samples", "Directory name to save the image samples [samples]")
 flags.DEFINE_boolean("train", False, "True for training, False for testing [False]")
-flags.DEFINE_boolean("ae", False, "True for AE, False for zGAN [False]")
+flags.DEFINE_string("model", "ae", "ae for AE, zgan for zGAN, and zgenerator for zGenerator")
 FLAGS = flags.FLAGS
 
 def main(_):
@@ -33,7 +38,7 @@ def main(_):
 	run_config = tf.ConfigProto()
 	run_config.gpu_options.allow_growth=True
 
-	if FLAGS.ae:
+	if FLAGS.model == "ae":
 		with tf.Session(config=run_config) as sess:
 			imae = IMAE(
 					sess,
@@ -51,7 +56,7 @@ def main(_):
 				imae.get_z(FLAGS)
 				#imae.test_interp(FLAGS)
 				#imae.test(FLAGS)
-	else:
+	elif FLAGS.model == "zgan":
 		if FLAGS.train:
 			with tf.Session(config=run_config) as sess_z:
 				zgan = ZGAN(
@@ -118,6 +123,41 @@ def main(_):
 						data_dir=FLAGS.data_dir)
 				imae.test_z(FLAGS, filtered_z, 256)
 			'''
+	elif FLAGS.model == "zgenerator":
+		with tf.Session(config=run_config) as sess:
+			zgenerator = ZGenerator(
+					sess,
+					FLAGS.real_size,
+					FLAGS.batch_size_input,
+					is_training = FLAGS.train,
+					dataset_name=FLAGS.dataset,
+					z_vectors=FLAGS.z_vectors,
+					checkpoint_dir=FLAGS.checkpoint_dir,
+					sample_dir=FLAGS.sample_dir,
+					data_dir=FLAGS.data_dir)
+
+			if FLAGS.train:
+				zgenerator.train(FLAGS)
+			else:
+				# zgenerator.test(FLAGS)
+
+				# mu = pd.read_csv(FLAGS.data_dir+'/'+FLAGS.mu_vectors+'.csv', header=None)
+				# mu = pd.DataFrame(mu)
+				# mu = mu.to_numpy()
+				# zgenerator.test_z(FLAGS, batch_z=mu)
+
+				# mu = pd.read_csv(FLAGS.data_dir+'/'+FLAGS.mu_vectors+'.csv', header=None)
+				# mu = pd.DataFrame(mu)
+				# mu = mu.to_numpy()
+				# zgenerator.test_z_variations(FLAGS, batch_z=mu)
+
+				mu = pd.read_csv(FLAGS.data_dir+'/'+FLAGS.mu_vectors+'.csv', header=None)
+				mu = pd.DataFrame(mu)
+				mu = mu.to_numpy()
+				sigma = pd.read_csv(FLAGS.data_dir+'/'+FLAGS.sigma_vectors+'.csv', header=None)
+				sigma = pd.DataFrame(sigma)
+				sigma = sigma.to_numpy()
+				zgenerator.test_mu_sigma(FLAGS, batch_mu=mu, batch_sigma=sigma)
 
 if __name__ == '__main__':
 	tf.app.run()
